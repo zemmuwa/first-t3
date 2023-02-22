@@ -23,6 +23,7 @@ import { prisma } from "../db";
 
 type CreateContextOptions = {
   session: Session | null;
+  token?: string;
 };
 
 /**
@@ -39,6 +40,7 @@ const createInnerTRPCContext = (opts: CreateContextOptions) => {
   return {
     session: opts.session,
     prisma,
+    token: opts.token,
   };
 };
 
@@ -50,12 +52,12 @@ const createInnerTRPCContext = (opts: CreateContextOptions) => {
  */
 export const createTRPCContext = async (opts: CreateNextContextOptions) => {
   const { req, res } = opts;
-
   // Get the session from the server using the getServerSession wrapper function
   const session = await getServerAuthSession({ req, res });
 
   return createInnerTRPCContext({
     session,
+    token: req.headers.authorization,
   });
 };
 
@@ -103,13 +105,14 @@ export const publicProcedure = t.procedure;
  * procedure.
  */
 const enforceUserIsAuthed = t.middleware(({ ctx, next }) => {
-  if (!ctx.session || !ctx.session.user) {
+  if ((!ctx.session || !ctx.session.user) && !ctx.token) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
   return next({
     ctx: {
       // infers the `session` as non-nullable
-      session: { ...ctx.session, user: ctx.session.user },
+      session: { ...ctx.session, user: ctx.session?.user },
+      token: ctx.token,
     },
   });
 });
